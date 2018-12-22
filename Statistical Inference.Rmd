@@ -1,0 +1,151 @@
+---
+title: "Final Project week 4 Statistical Inference"
+author: "Daniele Franco de Toledo"
+date: "22 december 2018"
+output: pdf_document
+---
+
+
+Part 1: Simulation Exercise
+This part is going to execute  simulations and data analysises to illustrate of the central limit theorem.
+
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+The exponential distribution can be simulated in R with rexp(n, lambda) where lambda is the rate parameter.
+The mean of exponential distribution is 1/lambda and the standard deviation is also also 1/lambda.
+ 
+```{r}
+set.seed(1)
+lambda <- 0.2 # Set lambda = 0.2 for all of the simulations.
+n <- 40       # In this simulation, we investigate the distribution of averages
+              # of 40 exponentials.
+simulations <- 1:1000 # We need to do a thousand or so simulated averages
+averages <- sapply(simulations, function(x) { mean(rexp(n, lambda)) })
+```
+
+## 1. Show where the distribution is centered at and compare it to the theoretical center of the distribution.
+
+When we calculate sample and theorithical mean, we see that both lie close together.
+```{r}
+mean(averages)
+1/lambda
+```
+
+## 2. Show how variable it is and compare it to the theoretical variance of the distribution.
+
+From the CLT we know that X^bar approximately follows N(mu, sigma^2/n).
+We know sigma to be 1/lambda.
+As such it follows that the theoretical standard deviation is:
+
+```{r}
+(1/lambda)/sqrt(40) # Theoretical standard deviation
+sd(averages)        # actual standard deviation
+# And the variances
+((1/lambda)/sqrt(40))^2
+sd(averages)^2
+```
+
+## 3. Show that the distribution is approximately normal.
+
+To do so, we plot an histogram of thesampled means and overlay the normal distribution with mean 5 and standard deviation `r sd(averages)` on top of it.
+We see that the normal distribution indeed closely matches the barplot of the means.
+
+```{r}
+library(ggplot2)
+# Sturges' formula
+k <- ceiling(log2(length(simulations)) + 1)
+bw <- (range(averages)[2] - range(averages)[1]) / k
+averages.sd <- sd(averages)
+p <- ggplot(data.frame(averages), aes(x=averages))
+p <- p + geom_histogram(aes(y=..density..), binwidth=bw)
+p <- p + stat_function(fun = dnorm, args=list(mean=5, sd=averages.sd))
+p
+```
+
+## 4. Evaluate the coverage.
+
+Evaluate the coverage of the confidence interval for 1/lambda: $$ \bar{X} \pm 1.96\frac{S}{\sqrt{n}}$$.
+
+```{r}
+mean(averages) + c(-1,1) * 1.96 * sd(averages) / sqrt(length(averages))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Part 2: We're going to analyze the ToothGrowth data in the R datasets package.
+
+
+
+1. Load the ToothGrowth data and perform some basic exploratory data analyses
+
+We plot the lengt vs the dose for each of the supplements.
+To gain a better view of groth rates, we also add a loess curve.
+We see that the growth rates seem to behave differently for both supplements.
+
+```{r warning=F}
+library(ggplot2)
+data(ToothGrowth)
+qplot(dose, len, data=ToothGrowth, color = supp, geom = "point") + geom_smooth(method = "lm") + labs(title = "ToothGrowth") + labs(x= "Dose of Supplements")
+```
+
+2. Provide a basic summary of the data.
+
+This dataset contains three variables: supplement, dose and len.
+For each supplement, and each dose we calculate basic descriptive statistics:
+standard deviation, variance, and mean.
+
+```{r}
+dose <- as.numeric(levels(as.factor(ToothGrowth$dose)))
+supp <- levels(ToothGrowth$supp)
+# Structured for further processing
+data <- list()
+x <- Map(function(s) {
+  Map(function(d) {
+    l <- ToothGrowth$len[ToothGrowth$dose == d & ToothGrowth$supp == s]
+    data <<- rbind(data, list(supp = s, dose = d, sd=sd(l), var=var(l), mu=mean(l)))
+  }, dose)
+}, supp)
+data
+```
+
+3. Use confidence intervals and hypothesis tests to compare tooth growth by supp and dose. (Use the techniques from class even if there's other approaches worth considering)
+
+We perform the student-t test for each dose level between the two supplements:
+
+```{r}
+tests = list()
+for (d in dose) {
+  ojd <- ToothGrowth$len[ToothGrowth$dose == d & ToothGrowth$supp == "OJ"]
+  vcd <- ToothGrowth$len[ToothGrowth$dose == d & ToothGrowth$supp == "VC"]
+  t <- t.test(ojd, vcd, var.equal=T)
+  id <- paste("OJ", d, "-", "VC", d)
+  tests <- rbind(tests, list(id=id, p.value=t$p.value, ci.lo=t$conf.int[1], ci.hi=t$conf.int[2]))
+}
+tests
+```
+
+4. State your conclusions and the assumptions needed for your conclusions.
+
+First, we assume that variance in all groups should be expected to be equal.
+The underlying assumption is that sampling of Guinea Pigs to assign them to a supplement and a dose was done properly.
+
+Based on the test results from the previous question we need to **reject** the following hypotheses:
+
+* True difference in means between OJ 0.5 and VC 0.5 is equal to 0
+* True difference in means between OJ 1 and VC 1 is equal to 0
+* True difference in means between OJ 2 and VC 2 is equal to 0
